@@ -1,0 +1,533 @@
+######################################
+#         Remove Domain User         #
+#                                    #
+# Used to remove, move and set email #
+#           delegation               #
+#                                    #
+#   Version 7.2 by Colin Combrink    #
+######################################
+
+# V3.0 This version queries AD for Exchange Servers via Group Memberships, Sets Delegation to the accounts Manager, or via another account via input.
+# All AD accounts are verrified using LDAP queries and if a failure script stops. 
+#
+# V4.0 This version adds the query to microsoft online and removes the assigned license if any on the supplied user account.
+# All outputs for delegation, status are now outputted via write-host for easier location of data
+#
+# V5.0 Adds GUI Interface
+#
+# V6.0 Changes the logic on the Email Delegation, Changes the marking account as disabled, and removes the Manager, Office Phone and sets Removed Description.
+#
+# v6.5 Adds the Checkbox for the Forward Email to Delegation
+# V6.6 Adds logic to MSOnline for Adding the Module
+# V7.0 Adds Warning Prompt before Removal, Adds Logic to Exchange Powershell Module, Moves the Logic for user verification to the GUI
+# V7.1 Changes to Rich Text Box to allows output to change color of output line. 
+# V7.2 Adds the variables for generic use at the begining of the script 
+
+
+### Windows GUI Form Creation ###
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+#Specific Variables
+
+    # Domain Variable
+        $global:domain = "domain"
+        $global:FQDN = "@domain.com"
+
+    # Office 365 Credentials
+        $username = "username@domain.com"
+        $password = "password"
+
+    #Office 365 License
+        $global:LicenseMatch = ("License") | Out-String
+
+
+
+#region begin GUI{ 
+
+$Form                            = New-Object system.Windows.Forms.Form
+$Form.ClientSize                 = '630,400'
+$Form.text                       = "Domain User Removal v7.2"
+$Form.TopMost                    = $false
+
+$UserID                          = New-Object system.Windows.Forms.TextBox
+$UserID.multiline                = $false
+$UserID.width                    = 155
+$UserID.height                   = 20
+$UserID.location                 = New-Object System.Drawing.Point(16,50)
+$UserID.Font                     = 'Microsoft Sans Serif,10'
+
+$AccountLabel                    = New-Object system.Windows.Forms.Label
+$AccountLabel.text               = "Kai Account To Be Removed"
+$AccountLabel.AutoSize           = $true
+$AccountLabel.width              = 25
+$AccountLabel.height             = 10
+$AccountLabel.location           = New-Object System.Drawing.Point(16,27)
+$AccountLabel.Font               = 'Microsoft Sans Serif,10'
+
+$WarningLabel                    = New-Object system.Windows.Forms.Label
+$WarningLabel.AutoSize           = $true
+$WarningLabel.width              = 25
+$WarningLabel.height             = 10
+$WarningLabel.location           = New-Object System.Drawing.Point(175,54)
+$WarningLabel.Font               = 'Microsoft Sans Serif,10'
+$WarningLabel.ForeColor          = "#ff0000"
+
+
+$AlaisKailabel                   = New-Object system.Windows.Forms.Label
+$AlaisKailabel.text              = "$FQDN"
+$AlaisKailabel.AutoSize          = $true
+$AlaisKailabel.width             = 25
+$AlaisKailabel.height            = 10
+$AlaisKailabel.location          = New-Object System.Drawing.Point(175,54)
+$AlaisKailabel.Font              = 'Microsoft Sans Serif,10'
+
+$EmailDelegation                 = New-Object system.Windows.Forms.Groupbox
+$EmailDelegation.height          = 225
+$EmailDelegation.width           = 270
+$EmailDelegation.text            = "Email Delegation if Required"
+$EmailDelegation.location        = New-Object System.Drawing.Point(14,89)
+
+$MDelegation                     = New-Object system.Windows.Forms.CheckBox
+$MDelegation.text                = "Managerial Delegation Requested"
+$MDelegation.AutoSize            = $false
+$MDelegation.width               = 220
+$MDelegation.height              = 20
+$MDelegation.location            = New-Object System.Drawing.Point(9,30)
+$MDelegation.Font                = 'Microsoft Sans Serif,10'
+
+$OUDelegation                    = New-Object system.Windows.Forms.CheckBox
+$OUDelegation.text               = "Other User Delegation Requested"
+$OUDelegation.AutoSize           = $false
+$OUDelegation.width              = 220
+$OUDelegation.height             = 20
+$OUDelegation.location           = New-Object System.Drawing.Point(9,62)
+$OUDelegation.Font               = 'Microsoft Sans Serif,10'
+
+$UserDel                         = New-Object system.Windows.Forms.TextBox
+$UserDel.multiline               = $false
+$UserDel.width                   = 120
+$UserDel.height                  = 20
+$UserDel.location                = New-Object System.Drawing.Point(19,90)
+$UserDel.Font                    = 'Microsoft Sans Serif,10'
+
+$Forward                         = New-Object system.Windows.Forms.CheckBox
+$Forward.text                    = "Forward Email to Delegation"
+$Forward.AutoSize                = $false
+$Forward.width                   = 220
+$Forward.height                  = 20
+$Forward.location                = New-Object System.Drawing.Point(45,120)
+$Forward.Font                    = 'Microsoft Sans Serif,10'
+
+$UserDelLabel                    = New-Object system.Windows.Forms.Label
+$UserDelLabel.text               = "$fqdn"
+$UserDelLabel.AutoSize           = $true
+$UserDelLabel.width              = 25
+$UserDelLabel.height             = 10
+$UserDelLabel.location           = New-Object System.Drawing.Point(145,95)
+$UserDelLabel.Font               = 'Microsoft Sans Serif,10'
+
+$WarningLabelDel                 = New-Object system.Windows.Forms.Label
+$WarningLabelDel.AutoSize        = $true
+$WarningLabelDel.width           = 25
+$WarningLabelDel.height          = 10
+$WarningLabelDel.location        = New-Object System.Drawing.Point(145,95)
+$WarningLabelDel.Font            = 'Microsoft Sans Serif,10'
+
+$Run                             = New-Object system.Windows.Forms.Button
+$Run.text                        = "Run"
+$Run.width                       = 60
+$Run.height                      = 30
+$Run.location                    = New-Object System.Drawing.Point(224,339)
+$Run.Font                        = 'Microsoft Sans Serif,10'
+
+$Output                          = New-Object system.Windows.Forms.RichTextBox
+$Output.multiline                = $true
+$Output.width                    = 318
+$Output.height                   = 300
+$Output.location                 = New-Object System.Drawing.Point(299,17)
+$Output.Font                     = 'Microsoft Sans Serif,10'
+$output.ForeColor                = [Drawing.Color]::Black
+$output.ScrollBars               = "Vertical"
+
+$Exit                            = New-Object system.Windows.Forms.Button
+$Exit.text                       = "Exit"
+$Exit.width                      = 60
+$Exit.height                     = 30
+$Exit.location                   = New-Object System.Drawing.Point(557,339)
+$Exit.Font                       = 'Microsoft Sans Serif,10'
+
+$Form.controls.AddRange(@($UserID,$AccountLabel,$WarningLabel,$AlaisKailabel,$EmailDelegation,$Run,$Output,$Exit))
+$EmailDelegation.controls.AddRange(@($MDelegation,$OUDelegation,$UserDel,$UserDelLabel,$WarningLabelDel,$Forward))
+
+#region gui events {
+$UserID.Add_TextChanged({  })
+$UserDel.Add_TextChanged({  })
+$Output.Add_TextChanged({  })
+$MDelegation.Add_CheckedChanged({  })
+$Forward.Add_CheckedChanged({  })
+$OUDelegation.Add_CheckedChanged({  })
+$Exit.Add_Click({  })
+$Run.Add_Click({  })
+#endregion events }
+
+#endregion GUI }
+
+#Write your logic code here
+
+    #### Modules ######
+
+    # Microsoft Online Install
+         Try { Get-InstalledModule -name MSOnline -ErrorAction stop
+             }
+         Catch {Install-Module -Name MsOnline -Force -Confirm:$false
+                $output.SelectionColor= [Drawing.Color]::Yellow
+                $output.AppendText("Installing MSOnline Powershell")
+                $output.AppendText("`r`n")
+                } 
+
+    #Sets the Exchanger Server without Prompting or being Hardcoded
+		$server = (Get-ADGroupMember "exchange Servers" | select-object -expandProperty samaccountname -First 1)
+		$server = $server.TrimEnd('$')
+        
+    
+	# Connect to Exchange Powershell
+        If ($module -eq $true) {
+            $output.SelectionColor= [Drawing.Color]::Green
+            $output.AppendText("Exchange Powershell Already Imported")           
+            $Output.AppendText("`r`n")}
+           Else{
+		$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$server/PowerShell/ -Authentication Kerberos
+        $output.SelectionColor= [Drawing.Color]::Green
+        $output.AppendText("Importing Exchange Powershell") 
+        $output.AppendText("`r`n")
+        $module = $true
+		Import-PSSession $Session}
+
+#####  Variables #####
+
+    #Set Global Variables to False
+        $global:userdm = $false
+        $global:UserOD = $false
+
+    #Set User Delegation to False
+        $UserDel.Enabled = $false
+
+    # Set Date for and description for Removed Date
+        $date = get-date -Format "yyyyMM"
+        $Des = "$date"
+
+    # Set User Credential for Office ONline
+        $secstr = New-Object -TypeName System.Security.SecureString
+        $password.ToCharArray() | ForEach-Object {$secstr.AppendChar($_)}
+        $cred = new-object -typename System.Management.Automation.PSCredential -argumentlist $username, $secstr
+
+#### Script Logic ####
+
+# Connect to Micorsoft Online (Office 365)
+    Try {Connect-MsolService -Credential $Cred -erroraction stop}
+        catch {$output.SelectionColor= [Drawing.Color]::RED
+               $output.AppendText("Office 365 Credentials Failed") 
+               $output.AppendText("`r`n")
+               $connect = $false
+               }
+
+   if ($connect -eq "true"){Connect-MsolService -Credential $Cred
+        $output.SelectionColor= [Drawing.Color]::Green
+        $output.AppendText("Connected to Office365")
+        $output.AppendText("`r`n")}
+    
+    else{ $UserCredential = Get-Credential -Message "Office365 Login - Use username@domain.com"
+        $output.SelectionColor= [Drawing.Color]::GreenYellow
+        $output.AppendText("Connected to Office365 using manual input")
+        $output.AppendText("`r`n")
+		Connect-MsolService -Credential $UserCredential}
+
+
+
+#Managerial Delegation Checkbox Logic
+    $MDelegation.Add_CheckedChanged({
+        if ($MDelegation.Checked -eq $true) {
+                $OUDelegation.Checked = $false
+                $WarningLabelDel.text = $null
+                $UserDelLabel.text = "$fqdn"
+                $UserDelLabel.Forecolor = "#000000"
+                $UserDel.Text = $null
+                $global:Userdm = $true}
+        else { $global:Userdm = $false}
+                 
+})
+    
+#User Delegation Checkbox Logic
+    $OUDelegation.Add_CheckedChanged({
+        if ($OUDelegation.Checked -eq $true) { 
+            $UserDel.Enabled = $true 
+            $MDelegation.Checked = $false
+            $run.Enabled = $false
+            }
+        else { $userDel.Enabled = $false 
+               $WarningLabelDel.text = $null
+               $UserDelLabel.text = "$fqdn"
+               $UserDelLabel.Forecolor = "#000000"
+               $UserDel.Text = $null
+               $run.enabled = $true} 
+               })
+
+#User to Be Removed Verification
+      $UserID.Add_TextChanged({
+         if ($userid.text.Length -gt 1){
+               $global:user = $userid.Text
+               $VUser = Get-ADUser -LDAPFilter "(sAMAccountName=$User)"
+               $global:name = get-aduser $user | Select-Object -ExpandProperty name
+               $global:office = Get-AdUser -Identity $user -Properties Description | Select-Object -ExpandProperty Description
+         If ($VUser -eq $Null)
+	         { $WarningLabel.text = "Account not Found!"
+               $warningLabel.ForeColor = "#ff0000" 
+               $AlaisKailabel.text = $null
+               $Run.Enabled = $false}  
+              				  
+	  	 Else { $WarningLabel.text = $null
+                $AlaisKailabel.text = "$fqdn"
+                $AlaisKailabel.Forecolor = "#0EB300"
+                $Run.Enabled = $true}
+               }
+ })
+
+ #Manual Input Delegation Account Verification
+      $UserDel.Add_TextChanged({
+         If ($UserDel.text.Length -gt 1){
+               $UserDel = $UserDel.Text
+               $VUserDel = Get-ADUser -LDAPFilter "(sAMAccountName=$UserDel)"
+
+         If ($VUserDel -eq $Null)
+	         { $WarningLabelDel.text = "Account not Found!"
+               $warningLabelDel.ForeColor = "#ff0000" 
+               $UserDelLabel.text = $null
+               $global:userD = "False"
+               $Run.Enabled = $false}  
+              				  
+	  	    Else { $WarningLabelDel.text = $null
+                $UserDelLabel.text = "$fqdn"
+                $UserDelLabel.Forecolor = "#0EB300"
+                $Run.Enabled = $true
+                $global:userD = "True"
+                $Delegation = $VUserDel	}
+               }
+ })
+ 
+    # Managerial Delegation Verificaiton  
+        $MDelegation.Add_CheckedChanged({
+
+		    if ($MDelegation.Checked -eq $true){
+        		$delegation = Get-ADUser $User -Properties Manager | Select-Object @{ n = "ManagerName"; e = { (Get-ADUser $_.Manager).SamAccountName } }
+		    	$delegation = $delegation | select-object -expandProperty managername
+			    $UserVD = Get-ADUser -LDAPFilter "(sAMAccountName=$delegation)"
+				    If ($UserVD -eq $Null)
+					    {$MDelegation.ForeColor = "#ff0000"
+                        $MDelegation.text = "No Mangerial Account Found!"
+					    $run.Enabled = $false
+					    }
+				    Else
+					    {$MDelegation.ForeColor = "#0EB300"
+                         $global:userD = "True"}
+                         }
+
+                Else{$Mdelegation.text = "Managerial Delegation Requested"
+                    $Mdelegation.foreColor = "#000000"
+                    $global:userD = "False"
+                 }
+})
+
+###### Running Script with Settings and Variables from Powershell Form
+
+$Run.Add_Click({ 
+
+    #Create Popup Acknowledgment Window
+
+        Add-Type -AssemblyName System.Windows.Forms
+        $Screen = [System.Windows.Forms.Screen]::PrimaryScreen
+
+        $Form = New-Object system.Windows.Forms.Form
+        $Form.BackColor = "#3e86ca"
+        $Form.TopMost = $true
+        $Form.Width = $Screen.Bounds.Width
+        $Form.Height = 200
+        $Form.FormBorderStyle = 'None'
+        $Form.StartPosition = 'Manual'
+        $Form.Top = ($Screen.Bounds.Height - $Form.Height)/2
+        $Form.Left = ($Screen.Bounds.Width - $Form.Width)/2
+
+        $Text = New-Object system.windows.Forms.Label
+        $Text.Text = @"
+                    By Acknowledging this Warning the account for $Name with title of $office will be removed from daily operation.
+
+
+"@
+        $Text.AutoSize = $true
+        $Text.Width = ($Screen.Bounds.Height - $Form.Height)/2
+        $Text.Height = 300
+        $TextX = $Form.Width / 2 - $Text.Width
+        $Text.location = new-object system.drawing.point($TextX,25)
+        $Text.Font = "Microsoft Sans Serif,10,style=bold"
+        $Text.ForeColor = "#ffffff"
+        $Form.controls.Add($Text)
+
+        $Ack = New-Object System.Windows.Forms.Button
+        $Ack.Text = 'Continue'
+        $Ack.Width = 200
+        $Ack.Height = 35
+        $Ack.FlatStyle = 'Flat'
+        $Ack.FlatAppearance.BorderColor = '#FFFFFF'
+        $Ack.Font = "Microsoft Sans Serif,14,style=Bold"
+        $Ack.ForeColor = "#ffffff"
+        $AckX = $Form.Width / 2.15 - $Ack.Width
+        $AckY = $Form.Height - $Ack.Height - 5
+        $Ack.Location = new-object system.drawing.point($AckX,$AckY)
+
+        $Cancel = New-Object System.Windows.Forms.Button
+        $Cancel.Text = 'Cancel'
+        $Cancel.Width = 200
+        $Cancel.Height = 35
+        $Cancel.FlatStyle = 'Flat'
+        $Cancel.FlatAppearance.BorderColor = '#FFFFFF'
+        $Cancel.Font = "Microsoft Sans Serif,14,style=Bold"
+        $Cancel.ForeColor = "#ffffff"
+        $CancelX = $Form.Width / 1.75 - $Cancel.Width
+        $CancelY = $Form.Height - $Cancel.Height - 5
+        $Cancel.Location = new-object system.drawing.point($CancelX,$CancelY)
+
+        $Form.Controls.AddRange(@($Ack,$Cancel))
+  
+    # Stop the Script and Return to the Gui
+    $Cancel.Add_Click({
+         $output.AppendText("Script retunred to GUI due to Operator Request")
+         $output.AppendText("`r`n")
+         $Form.Close()      
+    })
+  
+    #Start Removal for User Account
+        $Ack.Add_Click({
+
+        #close Warning Window
+            $Form.Close()
+
+        #Update Output Windows
+            $output.AppendText("Script started to remove end user $Name")
+            $output.AppendText("`r`n")
+
+        If ($delegation -eq $null){
+            $output.AppendText("Setting No Email Delegation for Account")
+            $output.AppendText("`r`n") }
+        Else {$output.AppendText("Email Delegation will be set to $Delegation")
+              $output.AppendText("`r`n") }          
+                  
+#### Removal Script Variables ####
+        
+        #Set Primary Group Membership
+                   
+    	    $group = get-adgroup "removed-users"
+		    Add-ADGroupMember -Identity $group -Members $user
+		    $groupSid = $group.sid	
+            $GroupID = $groupSid.Value.Substring($groupSid.Value.LastIndexOf("-") + 1)
+
+### Removal Script Run ###
+
+         #Office 365 License Verification
+            $License = (Get-MsolUser -UserPrincipalName ($user + "$fqdn") | Select-Object -ExpandProperty licenses )
+	        $License = ($License | select -First 1 | Select-Object -ExpandProperty AccountSkuId)
+	        $licenseString = ($License | Out-String)
+
+        #Office 365 License Removal
+		    if ($licenseString -eq $LicenseMatch)
+			    {Set-MsolUserLicense -UserPrincipalName ($user + "$fqdn") -RemoveLicenses "$license"
+			     $output.SelectionColor= [Drawing.Color]::Green
+                 $output.AppendText("Office 365 Licensed Revoked")
+                 $output.AppendText("`r`n")}
+		    else { 
+                 $output.SelectionColor= [Drawing.Color]::red
+                 $output.AppendText("Office 365 Licensed not assigned")
+                 $output.AppendText("`r`n")}
+
+        #Set User to Removed Users OU Group Membership 
+		    Get-ADUser "$user" | Set-ADObject -Replace @{ primaryGroupID = "$GroupID" }
+            $output.AppendText("Wait for Primary Group to Replicate")
+            $output.AppendText("`r`n")
+            Sleep -Seconds 5
+            
+        #Convert Account to Shared and Disable AD Account
+            $alias = Get-Mailbox -Identity $user | Select-Object -ExpandProperty "alias"       
+		        if ($alias = $user )
+                     {Get-Mailbox -Identity $user | Set-Mailbox -Type Shared
+                     $Email = $True
+		             $output.AppendText("Account Converted to Shared and Disabled") 
+                     $output.AppendText("`r`n")}
+               
+                Else { Disable-ADAccount -Identity $user
+                     $Email = $False
+                     $output.AppendText("No exchange account found - Disabled AD Account") 
+                     $output.AppendText("`r`n") }
+
+        #Add Mailbox Delegation
+		        if ($userd -eq "True"){
+			       Add-MailboxPermission -Identity $user -user $delegation -AccessRights FullAccess -InheritanceType ALL
+				   $output.AppendText( "Account Delegated to $delegation") 
+                   $output.AppendText("`r`n")
+                   }
+
+        #Add Forward to Delegation
+                if ($Forward.Checked -eq $true) {
+                    set-mailbox $user -ForwardingAddress ($delegation + "$fqdn") -DeliverToMailboxAndForward $True
+                    $output.AppendText("Account Forwarded to $Delegation")
+                    $output.AppendText("`r`n")   }
+        
+        #Remove all Membership except Removed Users OU
+		    $ADgroups = Get-ADPrincipalGroupMembership -Identity $user | where { $_.Name -ne "removed-users security group" }
+		    Remove-ADPrincipalGroupMembership -Identity $user -MemberOf $ADgroups -Confirm:$false
+            Set-ADUser $user -Manager $null -Description $Des -OfficePhone $null	
+           
+        #Move AD account to Removed Users OU Targeted Folder(s)
+	
+		If ($Email -eq "True"){
+            If ($userd -eq "True"){
+                If ($Forward.Checked -eq $True){
+			 	get-aduser -identity $user | Move-ADObject -TargetPath "OU=Mailbox Enabled Users WITH forward condition,OU=Removed users,DC=Domain,DC=Com"
+				$output.AppendText("User Account Moved to Removed Users with a Forward Condition OU")
+                $output.AppendText("`r`n")    }
+		        
+                Else {
+				    get-aduser -identity $user | Move-ADObject -TargetPath "OU=Mailbox Enabled Users without forward condition,OU=Removed users,DC=Domain,DC=Com"
+				    $output.AppendText("User Account Moved to Removed Users without Forward OU") 
+                    $output.AppendText("`r`n")}
+                    }    
+
+            Else {
+                get-aduser -identity $user | Move-ADObject -TargetPath "OU=Shared mailboxes for removed users,OU=Removed users,DC=Domain,DC=Com"
+                $output.AppendText("User Account Moved to Removed Users with Shared Mailboxes") 
+                $output.AppendText("`r`n")} }
+
+        Else {
+            get-aduser -identity $user | Move-ADObject -TargetPath "OU=Removed Users without a Mailbox,OU=Removed users,DC=Domain,DC=Com"
+            $output.AppendText("User Account Moved to Removed Users Without Mailboxes") 
+            $output.AppendText("`r`n") } 
+
+        #Write to output box that script is complete
+            $output.SelectionColor= [Drawing.Color]::Green
+            $output.AppendText("Script Completed for $user") 
+            $output.AppendText("`n") 
+           
+        # Must be at the end of the Script
+            [void]$Form.ShowDialog()
+})
+
+    # Must be at the end of the Script
+        [void]$Form.ShowDialog()
+
+})
+
+
+#Close the Form - Exit the Script
+    $Exit.Add_Click({ $form.close()
+})
+
+# Must be at the end of the Script
+[void]$Form.ShowDialog()
