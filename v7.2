@@ -58,7 +58,7 @@ $UserID.location                 = New-Object System.Drawing.Point(16,50)
 $UserID.Font                     = 'Microsoft Sans Serif,10'
 
 $AccountLabel                    = New-Object system.Windows.Forms.Label
-$AccountLabel.text               = "Kai Account To Be Removed"
+$AccountLabel.text               = "User Account To Be Removed"
 $AccountLabel.AutoSize           = $true
 $AccountLabel.width              = 25
 $AccountLabel.height             = 10
@@ -74,13 +74,13 @@ $WarningLabel.Font               = 'Microsoft Sans Serif,10'
 $WarningLabel.ForeColor          = "#ff0000"
 
 
-$AlaisKailabel                   = New-Object system.Windows.Forms.Label
-$AlaisKailabel.text              = "$FQDN"
-$AlaisKailabel.AutoSize          = $true
-$AlaisKailabel.width             = 25
-$AlaisKailabel.height            = 10
-$AlaisKailabel.location          = New-Object System.Drawing.Point(175,54)
-$AlaisKailabel.Font              = 'Microsoft Sans Serif,10'
+$Alaislabel                      = New-Object system.Windows.Forms.Label
+$Alaislabel.text                 = "$FQDN"
+$Alaislabel.AutoSize             = $true
+$Alaislabel.width                = 25
+$Alaislabel.height               = 10
+$Alaislabel.location             = New-Object System.Drawing.Point(175,54)
+$Alaislabel.Font                 = 'Microsoft Sans Serif,10'
 
 $EmailDelegation                 = New-Object system.Windows.Forms.Groupbox
 $EmailDelegation.height          = 225
@@ -157,7 +157,7 @@ $Exit.height                     = 30
 $Exit.location                   = New-Object System.Drawing.Point(557,339)
 $Exit.Font                       = 'Microsoft Sans Serif,10'
 
-$Form.controls.AddRange(@($UserID,$AccountLabel,$WarningLabel,$AlaisKailabel,$EmailDelegation,$Run,$Output,$Exit))
+$Form.controls.AddRange(@($UserID,$AccountLabel,$WarningLabel,$Alaislabel,$EmailDelegation,$Run,$Output,$Exit))
 $EmailDelegation.controls.AddRange(@($MDelegation,$OUDelegation,$UserDel,$UserDelLabel,$WarningLabelDel,$Forward))
 
 #region gui events {
@@ -283,12 +283,12 @@ $Run.Add_Click({  })
          If ($VUser -eq $Null)
 	         { $WarningLabel.text = "Account not Found!"
                $warningLabel.ForeColor = "#ff0000" 
-               $AlaisKailabel.text = $null
+               $Alaislabel.text = $null
                $Run.Enabled = $false}  
               				  
 	  	 Else { $WarningLabel.text = $null
-                $AlaisKailabel.text = "$fqdn"
-                $AlaisKailabel.Forecolor = "#0EB300"
+                $Alaislabel.text = "$fqdn"
+                $Alaislabel.Forecolor = "#0EB300"
                 $Run.Enabled = $true}
                }
  })
